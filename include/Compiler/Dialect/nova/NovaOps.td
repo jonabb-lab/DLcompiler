@@ -23,7 +23,7 @@ def Nova_AddOp : Op<Nova_Dialect, "add", [Pure, InferTypeOpInterface, Commutativ
   let results = (outs Nova_Tensor:$result);
   
   // Fix the assembly format
-  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` type($lhs) `,` type($rhs) `->` type($result)";
+  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` type($lhs) `,` type($rhs)";
 
   //let hasVerifier = 1;
 
@@ -39,6 +39,38 @@ def Nova_AddOp : Op<Nova_Dialect, "add", [Pure, InferTypeOpInterface, Commutativ
   }];
 }
 
+
+//----------------------------------MatMul/Dot Product Operation---------------------------------
+def Nova_MatMulOp : Op<Nova_Dialect, "matmul", [Pure, InferTypeOpInterface]> {
+  let summary = "Tensor dot product or matrix multiplication";
+  let description = [{
+    Computes the dot product (matrix multiplication) of two tensors.
+    The type inference must handle the shape change based on standard matrix rules.
+    
+    Example:
+      %r = nova.matmul %a, %b : tensor<2x3xf32>, tensor<3x4xf32>
+      // Result type inferred as: tensor<2x4xf32>
+  }];
+
+  let arguments = (ins Nova_Tensor:$lhs, Nova_Tensor:$rhs);
+  let results = (outs Nova_Tensor:$result);
+  
+  // Fix the assembly format to include operand types
+  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` type(operands)";
+
+  let extraClassDeclaration = [{git config pull.rebase false
+    // The C++ implementation must contain logic for matrix multiplication 
+    // shape inference (e.g., [M x K] * [K x N] -> [M x N]).
+    static ::mlir::LogicalResult inferReturnTypes(
+      ::mlir::MLIRContext *context,
+      std::optional<::mlir::Location> loc,
+      ::mlir::ValueRange operands,
+      ::mlir::DictionaryAttr attributes,
+      ::mlir::OpaqueProperties properties,
+      ::mlir::RegionRange regions,
+      ::llvm::SmallVectorImpl<::mlir::Type> &inferredReturnTypes);
+  }];
+}
 
 //-------------------------------base class for unary------------------------
 class Nova_UnaryOp<string mnemonic, list<Trait> traits = [],
@@ -140,7 +172,4 @@ def Nova_FloorOp: Nova_UnaryOp<"floor">{
 }
 
 
-
-
-//-----------------------------------------------------
 #endif // NOVA_OPS

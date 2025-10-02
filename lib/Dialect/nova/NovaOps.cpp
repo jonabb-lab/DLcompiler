@@ -112,30 +112,81 @@ LogicalResult AddOp::inferReturnTypes(
   return success();
 }
 
-// Optional: Add a verify method for additional runtime checks
-// LogicalResult AddOp::verify() {
-//   auto lhsType = getLhs().getType().cast<TensorType>();
-//   auto rhsType = getRhs().getType().cast<TensorType>();
-//   auto resultType = getResult().getType().cast<TensorType>();
+
   
-//   // Verify element types match
-//   if (lhsType.getElementType() != rhsType.getElementType() ||
-//       lhsType.getElementType() != resultType.getElementType()) {
-//     return emitOpError("element types must match across all operands and result");
-//   }
-  
-//   // If all types are ranked, verify the result shape is correct
-//   if (lhsType.hasRank() && rhsType.hasRank() && resultType.hasRank()) {
-//     auto expectedShape = computeBroadcastShape(lhsType.getShape(), 
-//                                                 rhsType.getShape());
-//     if (!expectedShape) {
-//       return emitOpError("operand shapes are not broadcast-compatible");
-//     }
+// ... Matmul operation ...
+
+LogicalResult MatMulOp::inferReturnTypes(
+    MLIRContext *context,
+    std::optional<Location> loc,
+    ValueRange operands,
+    DictionaryAttr attributes,
+    OpaqueProperties properties,
+    RegionRange regions,
+    llvm::SmallVectorImpl<Type> &inferredReturnTypes) {
     
-//     if (resultType.getShape() != *expectedShape) {
-//       return emitOpError("result shape does not match expected broadcast shape");
-//     }
-//   }
+  if (operands.size() != 2) {
+    if (loc) {
+      mlir::emitError(*loc, "nova.matmul requires exactly 2 operands");
+      return failure();
+    }
+    return failure();
+  }
+
+  auto lhsType = llvm::dyn_cast<TensorType>(operands[0].getType());
+  auto rhsType = llvm::dyn_cast<TensorType>(operands[1].getType());
+
+  if (!lhsType || !rhsType) {
+    if (loc) {
+      mlir::emitError(*loc, "nova.matmul operands must be tensors");
+      return failure();
+    }
+    return failure();
+  }
+
+  auto lhsShape = lhsType.getShape();
+  auto rhsShape = rhsType.getShape();
+
+  // 1. VERIFY ELEMENT TYPE CONSISTENCY
+  if (lhsType.getElementType() != rhsType.getElementType()) {
+      if (loc) {
+          mlir::emitError(*loc, "nova.matmul element types must match: ")
+              << lhsType.getElementType() << " vs " << rhsType.getElementType();
+          return failure();
+      }
+      return failure();
+  }
+
+  // 2. VERIFY RANK AND COMPATIBILITY
+  if (lhsShape.size() != 2 || rhsShape.size() != 2) {
+    if (loc) {
+      mlir::emitError(*loc, "nova.matmul only supports 2D tensors for now (got ranks ")
+          << lhsShape.size() << " and " << rhsShape.size() << ")";
+      return failure();
+    }
+    return failure();
+  }
   
-//   return success();
-// }
+  // Check for compatible inner dimensions (K)
+  if (lhsShape[1] != rhsShape[0]) {
+    if (lhsShape[1] != ShapedType::kDynamic && rhsShape[0] != ShapedType::kDynamic) {
+        if (loc) {
+            mlir::emitError(*loc, "nova.matmul inner dimensions must match: ")
+                << lhsShape[1] << " vs " << rhsShape[0];
+            return failure();
+        }
+        return failure();
+    }
+  }
+
+  // 3. INFER AND ADD RESULT TYPE
+  SmallVector<int64_t, 2> resultShape;
+  resultShape.push_back(lhsShape[0]); // M
+  resultShape.push_back(rhsShape[1]); // N
+
+  auto resultType = RankedTensorType::get(resultShape, lhsType.getElementType());
+  
+  inferredReturnTypes.push_back(resultType);
+  
+  return success();
+}
